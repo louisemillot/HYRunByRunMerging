@@ -18,7 +18,7 @@
 ## \brief  Scripts to merge all output files according to a given run list
 ##
 
-INPUT_REPO=alice
+INPUT_REPO=./
 RUN_LIST_STRING="526641, 526964, 527041, 527057, 527109, 527240, 527850, 527871, 527895, 527899, 528292, 528461, 528531"
 IFS=", " read -ra RUN_LIST <<< "${RUN_LIST_STRING}"
 
@@ -30,6 +30,7 @@ INITIAL_RUN_LIST_LOG=""
 USED_RUN_LIST_LOG=""
 MISSING_RUN_LIST_LOG=""
 MISSING_RUN_REASON_LOG=""
+FILE_LIST_STRING=""
 for key in "${!RUN_LIST[@]}"; 
 do 
 INITIAL_RUN_LIST_LOG="${INITIAL_RUN_LIST_LOG} ${RUN_LIST[${key}]}, "
@@ -38,6 +39,7 @@ if [ -n "${string}" ]; then # check that directory associated to this run has be
     file_exist=$(find ${string/download_summary.txt//} -name AnalysisResults.root)
     if [ -n "${file_exist}" ]; then # check that there are .root files in that directory (could be missing if merging has not been done)
         USED_RUN_LIST_LOG="${USED_RUN_LIST_LOG} ${RUN_LIST[${key}]}, "
+        FILE_LIST_STRING="${FILE_LIST_STRING} ${file_exist}"
     else
         MISSING_RUN_LIST_LOG="${MISSING_RUN_LIST_LOG} ${RUN_LIST[${key}]}, "
         MISSING_RUN_REASON_LOG=$(printf "${MISSING_RUN_REASON_LOG} - ${RUN_LIST[${key}]}: AnalysisResults.root file not found (please check on Hyperloop if merging was done)\n")
@@ -59,5 +61,5 @@ echo "########################" >> merge_summary.txt
 echo "########################" >> merge_summary.txt
 
 # proceed to merging
-hadd -k AnalysisResults.root $(for key in "${!RUN_LIST[@]}"; do string=$(grep -r -l ${RUN_LIST[${key}]} ${INPUT_REPO}) ; echo ${string/download_summary.txt/AnalysisResults.root}; done)
+hadd -k AnalysisResults.root ${FILE_LIST_STRING}
 more merge_summary.txt

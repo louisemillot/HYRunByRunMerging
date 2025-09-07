@@ -37,8 +37,8 @@ MISSING_RUN_REASON_LOG=""
 for key in "${!RUN_LIST[@]}"; 
 do 
 INITIAL_RUN_LIST_LOG="${INITIAL_RUN_LIST_LOG} ${RUN_LIST[${key}]}, "
-string_real=$(grep -r -l ${RUN_LIST[${key}]} ${INPUT_REPO_REAL}/alice) 
-string_mc=$(grep -r -l ${RUN_LIST[${key}]} ${INPUT_REPO_MC}/alice) 
+string_real=$(grep -r -l ${RUN_LIST[${key}]} ${INPUT_REPO_REAL}) 
+string_mc=$(grep -r -l ${RUN_LIST[${key}]} ${INPUT_REPO_MC}) 
 if [ -n "${string_real}" ] && [ -n "${string_mc}" ]; then # check that the directories associated to this run have been downloaded
     file_real_exist=$(find ${string_real/download_summary.txt//} -name AnalysisResults.root)
     file_mc_exist=$(find ${string_mc/download_summary.txt//} -name AnalysisResults.root)

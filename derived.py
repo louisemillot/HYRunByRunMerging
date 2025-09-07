@@ -14,11 +14,14 @@ except ImportError as e:
           "Progress bar will not be available (you can install tqdm for the progress bar) `pip3 install --user tqdm`")
 
 # Modes
+NUMBER_OF_JOBS = 12 # if the number of job is 1, then the download is performed sequentially. If it is greater than 1, the download is performed in parallel using the option -T of the alien_cp command
+OVERWRITE_FILES = False # overwrite already downloaded files?
+RUN_NUMBER_FOR_OUTPUT_PATH = True # use the run number for the output path. If on False, the same path as on the grid is used.
 DOWNLOAD_ALL = True # only in case of downloading derived data! Download ALL AO2Ds and AnalysisResults.root or only those from final merging?
 DOWNLOAD_ALL_IF_MERGEDFILE_MISSING = False # in case the merging (per run) was not done, should we download the output file of each subjobs and do the merging ourselves?
 
-def run_cmd(cmd, stdout_encoded_in_text = False):
-    run_result = subprocess.run(cmd, shell=True, capture_output=True, text = stdout_encoded_in_text)
+def run_cmd(cmd, capture = True, stdout_encoded_in_text = False):
+    run_result = subprocess.run(cmd, shell=True, capture_output=capture, text = stdout_encoded_in_text)
     return run_result
 
 class HyperloopOutput:
@@ -58,6 +61,11 @@ class HyperloopOutput:
         in_path = self.alien_path
         file_name = path.basename(in_path)
         dir_name = path.dirname(in_path)
+        if RUN_NUMBER_FOR_OUTPUT_PATH:
+            if not "hy_" in dir_name.split("/")[-1]:
+                dir_name = f"{self.run_number}/{dir_name.split('/')[-1]}"
+            else:
+                dir_name = str(self.run_number)
         return path.join(self.out_path, dir_name.strip("/"), file_name)
 
     def exists(self):
@@ -92,6 +100,7 @@ class HyperloopOutput:
         return self.__str__()
 
     def copy_from_alien(self,
+                        parallel_download = False,
                         overwrite=False):
         out_path = path.dirname(self.out_filename())
         if not path.isdir(out_path):
@@ -116,47 +125,62 @@ class HyperloopOutput:
                 print("File", self.out_filename(), "was not sane, removing it and attempting second download", color=bcolors.BWARNING)
 
         if ".root" in self.get_alien_path() or ".xml" in self.get_alien_path():
-            print("---> Downloading", self.get_alien_path(), "to", self.out_filename())
-            cmd = f"alien_cp -q {self.get_alien_path()} file:{self.out_filename()}"
-            if not run_cmd(cmd).returncode == 0:
-                print("!!! No AO2Ds found in ", self.get_alien_path()," !!!")
+            if parallel_download:
+                cmd = f"echo \"{self.get_alien_path()} file:{self.out_filename()}\" >> files_to_download.txt"
+                if not run_cmd(cmd).returncode == 0:
+                    print("!!! Cannot execute command ", cmd, " !!!")
+            else:
+                print("---> Downloading", self.get_alien_path(), "to", self.out_filename())
+                cmd = f"alien_cp -q {self.get_alien_path()} file:{self.out_filename()}"
+                if not run_cmd(cmd).returncode == 0:
+                    print("!!! No AO2Ds found in ", self.get_alien_path()," !!!")
             
             if "AO2D.root" in self.get_alien_path():
-                print("---> Downloading AnalysisResults too...");
                 temporary = self.get_alien_path()
                 analysisresults = temporary.replace("AO2D.root", "AnalysisResults.root")
                 temporary = self.out_filename()
                 analysisresultslocal = temporary.replace("AO2D.root", "AnalysisResults.root")
-                
-                cmd = f"alien_cp -q {analysisresults} file:{analysisresultslocal}"
-                run_cmd(cmd)
-                if not run_cmd(cmd).returncode == 0:
-                    print("!!! No AnalysisResults.root found in ", analysisresults, " !!!")
+
+                if parallel_download:
+                    cmd = f"echo \"{analysisresults} file:{analysisresultslocal}\" >> files_to_download.txt"
+                    if not run_cmd(cmd).returncode == 0:
+                        print("!!! Cannot execute command ", cmd, " !!!")
                 else:
-                    print("---> AR should be at: " + analysisresultslocal)
+                    print("---> Downloading AnalysisResults too...");
+                    cmd = f"alien_cp -q {analysisresults} file:{analysisresultslocal}"
+                    run_cmd(cmd)
+                    if not run_cmd(cmd).returncode == 0:
+                        print("!!! No AnalysisResults.root found in ", analysisresults, " !!!")
+                    else:
+                        print("---> AR should be at: " + analysisresultslocal)
         else: # merging was not done
             if DOWNLOAD_ALL_IF_MERGEDFILE_MISSING:
-                print("---> Downloading", self.get_alien_path(), "to", self.out_filename())
-                cmd = f"alien_cp -q -R {self.get_alien_path()} file:{out_path}"
-                run_cmd(cmd)
-                if not DOWNLOAD_ALL:
-                    print("---> Merging AnalysisResults")
-                    cmd = f"hadd {self.out_filename()}/AnalysisResults.root $(find {self.out_filename()} -name AnalysisResults.root) > {self.out_filename()}/merging_analysis.log"
+                if parallel_download:
+                    cmd = f"echo \"{self.get_alien_path()} file:{out_path}\" >> files_to_download.txt"
+                    if not run_cmd(cmd).returncode == 0:
+                        print("!!! Cannot execute command ", cmd, " !!!")
+                else:
+                    print("---> Downloading", self.get_alien_path(), "to", self.out_filename())
+                    cmd = f"alien_cp -q -R {self.get_alien_path()} file:{out_path}"
                     run_cmd(cmd)
-                    print("---> AR should be at: " + self.out_filename() + "/AnalysisResults.root")
-                    print("---> Merging AO2D (if any)")
-                    cmd = f"find {self.out_filename()} -name AO2D.root > {self.out_filename()}/input.txt"
-                    run_cmd(cmd)
-                    cmd = f"(cd {self.out_filename()} ; o2-aod-merger > merging_AO2D.log)"
-                    run_cmd(cmd)
-                    print("---> AO2D should be at: " + self.out_filename() + "/AO2D.root")
+                    if not DOWNLOAD_ALL:
+                        print("---> Merging AnalysisResults")
+                        cmd = f"hadd {self.out_filename()}/AnalysisResults.root $(find {self.out_filename()} -name AnalysisResults.root) > {self.out_filename()}/merging_analysis.log"
+                        run_cmd(cmd)
+                        print("---> AR should be at: " + self.out_filename() + "/AnalysisResults.root")
+                        print("---> Merging AO2D (if any)")
+                        cmd = f"find {self.out_filename()} -name AO2D.root > {self.out_filename()}/input.txt"
+                        run_cmd(cmd)
+                        cmd = f"(cd {self.out_filename()} ; o2-aod-merger > merging_AO2D.log)"
+                        run_cmd(cmd)
+                        print("---> AO2D should be at: " + self.out_filename() + "/AO2D.root")
                 cmd = f"mv {out_path}/download_summary.txt {self.out_filename()}"
                 run_cmd(cmd)
                 return True
             else:
                 return
 
-def getXMLList(train_id=251632,
+def getXMLList(train_id=494198,
                alien_path="https://alimonitor.cern.ch/alihyperloop-data/trains/train.jsp?train_id=",
                out_path="./",
                key_file="~/.globus/userkey.pem",
@@ -202,9 +226,9 @@ def getXMLList(train_id=251632,
 
 def hasMergedFiles(alien_repo_AOD):
         cmd = f"alien.py find {alien_repo_AOD}/ -r -d \".*[0-9]+/$\""
-        return run_cmd(cmd, True)
+        return run_cmd(cmd, True, True)
     
-def getAO2DList(xmlfile="aod_production.xml"):
+def getAO2DList(xmlfile="aod_production.xml", run_number = ""):
     print("parse file: "+xmlfile)
     tree = ET.parse(xmlfile) # convert the xml file into a tree
     root = tree.getroot() # get the root of the tree, the list of collection in our case
@@ -225,6 +249,7 @@ def getAO2DList(xmlfile="aod_production.xml"):
                 data = {}
                 json_data = json.dumps(data) # dummy json entry to create HyperloopOutput
                 hyOut=HyperloopOutput(json_entry=json_data, out_path="./")
+                hyOut.run_number = run_number
                 hyOut.alien_path = dir + "/AO2D.root"
                 print("alien_path internal for posterior download: "+hyOut.alien_path)
                 ao2d_file_list.append(hyOut)
@@ -238,21 +263,32 @@ def getAO2DList(xmlfile="aod_production.xml"):
                     data = {}
                     json_data = json.dumps(data) # dummy json entry to create HyperloopOutput
                     hyOut=HyperloopOutput(json_entry=json_data, out_path="./")
+                    hyOut.run_number = run_number
                     hyOut.alien_path = info.get('lfn')
                     print("alien_path internal for posterior download: "+hyOut.alien_path)
                     ao2d_file_list.append(hyOut)
     return ao2d_file_list
 
+if NUMBER_OF_JOBS > 1:
+  cmd = f"rm files_to_download.txt"
+  if not run_cmd(cmd).returncode == 0:
+    print("!!! Cannot execute command ", cmd, " !!!")
+
 xml_list, is_from_analysis = getXMLList()
 for xml in xml_list:
-  mergedfile_is_missing = xml.copy_from_alien(overwrite=False)
+  mergedfile_is_missing = xml.copy_from_alien(parallel_download = is_from_analysis, overwrite=OVERWRITE_FILES)
   if is_from_analysis or mergedfile_is_missing: 
     continue # if output comes from analysis or from a job where the merging was not done, no need to go further and download AO2Ds
   # look for the list of AO2Ds to download (if not already downloaded)
   xmlString=xml.out_filename()
   print("XML file now at: "+xmlString)
-  ao2d_file_list=getAO2DList(xmlfile=xmlString)
+  ao2d_file_list=getAO2DList(xmlfile=xmlString, run_number = xml.get_run())
   downloaded = []
   for i in tqdm.tqdm(ao2d_file_list, bar_format='{l_bar}{bar:10}{r_bar}{bar:-10b}'):
-      downloaded.append(i.copy_from_alien(overwrite=False))
+    downloaded.append(i.copy_from_alien(parallel_download = (NUMBER_OF_JOBS > 1), overwrite=OVERWRITE_FILES))
 
+if NUMBER_OF_JOBS > 1:
+  print("---> Downloading with ", NUMBER_OF_JOBS, " jobs")
+  cmd = f"parallel --bar --verbose -j {NUMBER_OF_JOBS} --colsep ' ' alien_cp {{1}} {{2}} :::: files_to_download.txt"  
+  if not run_cmd(cmd, False).returncode == 0:
+    print("!!! Cannot download files from files_to_download.txt !!!")

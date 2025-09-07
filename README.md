@@ -14,24 +14,28 @@ In order to merge only the files from a certain runlist, one needs first to down
 
 ### Downloading files run by run
 Before executing the script `derived.py`, 
-- edit the line 159 with your train ID. For instance, let's say we want to download all the files from the train `251632`, the line 159 should be `def getXMLList(train_id=251632,`.
+- edit the line 183 with your train ID. For instance, let's say we want to download all the files from the train `251632`, the line 183 should be `def getXMLList(train_id=251632,`.
 - load a O2/O2Physics environment,
 - load your certificates and
 - proceed to downloading all the files run by run by typing `python3 derived.py`.
 
 The script will first download a json file containing the info of the job results related to the corresponding train ID, and then it will download the output file of each job.
 
-**IMPORTANT 1:** in case of derived data, you will not have one file per run, but several files belonging to the same run scattered over different subdirectories. That is because there is no final merging for derived data, there is only an intermediate merging and the train is set to `done` by operators.
-Hence, two options are available: either you can download all AO2D.root and AnalysisResults.root files before any merging (default option), or you can only download the files from the intermediate merging. The choice of option can be changed by turning on True or False, respectively, the boolean at line 17 `DOWNLOAD_ALL`.
+**IMPORTANT 1:** in order to download the files faster, the download is performed in parallel on 12 jobs. In case, you want to reduce the number of jobs, you need to change the variable `NUMBER_OF_JOBS` at line 17. For disabling the parallel download, set the `NUMBER_OF_JOBS` to `1`.
 
-**IMPORTANT 2:** after some time, the train output are deleted on the grid, and thus the first option may no longer be available. Although the second option deals with a fewer number of files, in case there was an issue during the merging (merging failed or some files were corrupted), there is no way to fix it afterwards; only the first option offers this flexibility.
+**IMPORTANT 2:** by default, a directory is created for each run. In case you want to download the output in directories matching the output train directories on the grid (`alice/cern.ch/user/a/alihyperloop/jobs/0<000>/hy_<trainID>`), the variable `RUN_NUMBER_FOR_OUTPUT_PATH` needs to be switched to `False`
 
-**IMPORTANT 3:** when running on the grid, it may happen that some subjobs from a given masterjob (or run) finished in error states. If there are too many subjobs in error states, the merging will not start for this masterjob. In such a case, this masterjob will not be considered in the final merging across all masterjobs/runs, i.e. this masterjob/run will not be included in the final output file. By default, the `derived.py` script reproduces this behaviour and will not download output files from masterjobs that could not proceed to merging. In case you are interested in still having the files from those masterjobs, you can tell the script `derived.py` to download them and merge them locally by switching the variable `DOWNLOAD_ALL_IF_MERGEDFILE_MISSING` at line 18 on `True`. Please note, however, that the best course of action would be to understand why too many jobs went in error. 
+**IMPORTANT 3:** in case of derived data, you will not have one file per run, but several files belonging to the same run scattered over different subdirectories. That is because there is no final merging for derived data, there is only an intermediate merging and the train is set to `done` by operators.
+Hence, two options are available: either you can download all AO2D.root and AnalysisResults.root files before any merging (default option), or you can only download the files from the intermediate merging. The choice of option can be changed by turning on True or False, respectively, the boolean at line 20 `DOWNLOAD_ALL`.
+
+**IMPORTANT 4:** after some time, the train output are deleted on the grid, and thus the first option may no longer be available. Although the second option deals with a fewer number of files, in case there was an issue during the merging (merging failed or some files were corrupted), there is no way to fix it afterwards; only the first option offers this flexibility.
+
+**IMPORTANT 5:** when running on the grid, it may happen that some subjobs from a given masterjob (or run) finished in error states. If there are too many subjobs in error states, the merging will not start for this masterjob. In such a case, this masterjob will not be considered in the final merging across all masterjobs/runs, i.e. this masterjob/run will not be included in the final output file. By default, the `derived.py` script reproduces this behaviour and will not download output files from masterjobs that could not proceed to merging. In case you are interested in still having the files from those masterjobs, you can tell the script `derived.py` to download them and merge them locally by switching the variable `DOWNLOAD_ALL_IF_MERGEDFILE_MISSING` at line 21 on `True`. Please note, however, that the best course of action would be to understand why too many jobs went in error. 
 
 ### Merging files locally based on the run number
 This section only applies to the case where we want to merge the output from an analysis train, not from a derived data production. If you do need to merge output files from a train producing derived data, please contact me in order to find a solution.
 
-After executing the script `derived.py`, a new directory should be present called `alice`. It should contain numerous subdirectories, each containing two files: AnalysisResults.root and download_summary.txt. 
+After executing the script `derived.py`, new directories should be present (or one new directory called `alice` with numerous subdirectories in case `RUN_NUMBER_FOR_OUTPUT_PATH` has been turned on `False`), each containing two files: AnalysisResults.root and download_summary.txt. 
 
 To initiate the merging of the AnalysisResults.root files according to a given runlist, 
 - open the file `mergeFile.sh`,
@@ -44,7 +48,7 @@ From this stage, all AnalysisResults.root files coming from your train ID and yo
 ### Merging files locally from runs in common between two datasets and based on the run number
 This section only applies to the case where we want to merge the output from two analysis trains (not from a derived data production) in such a way that we consider only the runs belonging to your favorite runlist and common between the two trains (for example, the typical use case could be: you want to make sure that you look at the same runs in the data and in MC). This section only applies to analysis trains, not to trains producing derived data. If you are interested in the latter, please contact me in order to find a solution.
 
-After executing the script `derived.py` twice (one for each analysis train) in separate directories, you should have two directories (one for each analysis train) containing a directory called `alice`. It should contain numerous subdirectories, each containing two files: AnalysisResults.root and download_summary.txt. 
+After executing the script `derived.py` twice (one for each analysis train) in separate directories, you should have two directories (one for each analysis train) containing directories for each run in the dataset (or one directory called `alice` with numerous subdirectories in case `RUN_NUMBER_FOR_OUTPUT_PATH` has been turned on `False`). It should contain two files: AnalysisResults.root and download_summary.txt. 
 
 To initiate the merging of the AnalysisResults.root files for the two productions according to a given runlist, 
 - in one of the two directories, open the file `mergeByCommonRun.sh`,
